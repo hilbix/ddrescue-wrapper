@@ -2,5 +2,6 @@
 
 . "${0%/*}/.inc"
 
+target "$1"
 check .
 run sed -i"old-`date +%Y%m%d%H%M%S`.$$" -e 's/ \/$/ ?/' -e 's/ -$/ ?/' "$1/log"

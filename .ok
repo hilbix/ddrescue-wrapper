@@ -2,6 +2,7 @@
 
 . "${0%/*}/.inc"
 
+target "$1"
 check "$2"
 [ -d OK ] || mkdir OK || OOPS "cannot create dir: OK"
 run mv --backup=t "$1" OK/
