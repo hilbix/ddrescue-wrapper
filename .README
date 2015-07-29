@@ -1,0 +1,98 @@
+# ddrescue-wrapper
+
+This is for Linux.  May be helpful for other OS as well.
+
+Simple script to support safe use of gddrescue in a special way.
+
+## About
+
+The problem with gddrescue is option `-f`.  If you unintentionally mix source and destination you are doomed.
+
+You think, you never do this, because you are always careful?  Well, then do this several tousand times, in a hurry, with things failing a lot, and we talk again.
+
+This here is a quick wrapper to make it more safe to run gddrescue.
+
+## Example
+
+```bash
+git clone https://github.com/hilbix/ddrescue-wrapper
+cd ddrescue-wrapper
+./.lvm a b
+./.x a
+# Interrupt because drive with VG a needs a power cycle
+# After the power-cycle remove the debris in devicemapper
+dmsetup remove a-a
+# As the source went away while copying, redo everything
+./.redo a
+# now start again
+# The . prevents to copy to bail out because the destination is not empty
+./.x a .
+./.ok a
+```
+
+Note:
+
+- `./.lvm` supports VG/LV names, like `./.lvm a/x b/y`, the directory then is named `a-x` accordingly (with a single `-` doubled in x as seen in `dmsetup`).
+
+This assumes:
+
+- source LV is `/dev/a/a`
+- destination LV is `/dev/b/b`
+- copy a to b
+- interrupt the copy because something evil happens
+- continue the copy a to b
+- run `.ok` if everything is copied
+
+The `.lvm` is just best practice.  If you do it not this way, you may accidently destroy all your data, because if you copy whole drives etc. the Linux kernel has a hard time to distinguish the drives, and they may even swap places if you use an improper way of addressing source and destination.  By using LVM the chance to destroy the source by accidentally using it as the destination is near to 0.
+
+- Instead using an entire drive or do partitioning, start to use LVM.
+- Only LVM allows you to safely name and identify a drive.
+- The best way to do this is to give each drive an unique name.
+- This unique name then is used for VG and LV at the same time.
+- Hence the drive with name NAME becomes /dev/NAME/NAME
+- For proper defect management, never use a full drive.
+- Instead let 250 PEs free, such that you can remap them on defect.
+  (I am working on VG defect management currenlty)
+- A PE usually is 4 MiB such that 250 PEs means 1 GiB
+- Compare this 1 GiB to a drive with 6 TiB today
+
+Now if a drive starts failing (S.M.A.R.T. complains, you get sectors which cannot be remapped, etc.), it is easy to fix:
+
+- Buy a new disk, which probably is bigger than the old
+- Plug it into some special computer which has an external USB3 drive port
+- Check your drive for correctness
+  - To write and compare a test pattern on a new drive, you probably can use my tool `diskus`, it is at https://github.com/hilbix/diskus
+  - Use smartmontools' `smartctl` to record the S.M.A.R.T. of the drive
+- Prpare the new disk:
+```bash
+pvcreate /dev/sdX	# where X is the new disk (see output of `dmesg`)
+vgcreate NAME /dev/sdX
+lvcreate -l 99%FREE -n NAME NAME
+./.lvm OLDNAME NAME
+```
+- Rip the old disk kout of the other computer
+- Plug it into this special computer with another external USB3 drive port
+- If the old disk is not LVM, adjust the softlink OLDNAME/src accordingly
+  - As all those names just quite too easily refer to the wrong disk
+    - better never use
+      - /dev/by-label/
+      - /dev/by-partlabel/
+      - /dev/by-partuuid/
+      - /dev/by-uuid/
+      - /dev/by-path/
+    - and be extra cautious when using
+      - /dev/sd*
+      - /dev/by-path/
+  - If you get the source wrong, your copy is incorrect, `ddrescue-verify` is your friend, but never run it when both drives are connected, just to be sure you access the right drive!
+  - As the destination is LVM this cannot harm your data
+- After the copy
+  - Verify the copy using my tool `ddrescue-verify`, see https://github.com/hilbix/ddrescue-verify
+    - Unplug the destination
+    - Run `ddrescue-verify a/src a/log > a/verify`
+    - Unplug the source and replug the destination
+    - Run `ddrescue-verify a/dst a/verify >a/cmp`
+  - Note: the old source now is retired, keep it unplugged
+  - Rename the VG/LV of the destination accordingly with `vgrename` and `lvrename`
+- Plug in the drive into the original computer where the now retired source came from
+- Scrub your filesystem (you use ZFS or BTRFS, right?  If not, WTF?!?) such that it can repair itself.
+

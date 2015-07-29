@@ -1,0 +1,8 @@
+#!/bin/bash
+
+. "${0%/*}/.inc"
+
+check "$2"
+[ -d OK ] || mkdir OK || OOPS "cannot create dir: OK"
+run mv --backup=t "$1" OK/
+

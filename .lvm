@@ -1,0 +1,61 @@
+#!/bin/bash
+
+OOPS()
+{
+echo "OOPS: $*" >&2
+exit 2
+}
+
+ret=:
+WARN()
+{
+echo "WARN: $*" >&2
+ret=false
+}
+
+check()
+{
+NAME="${1#/dev/}"
+case "$NAME" in
+'')			OOPS "empty/missing arg!"
+*/*/*)			OOPS "cannot use $1, either A or A/B but not a full path";;
+*[^-./_a-zA-Z0-9]*)	OOPS "please stick to sane characters in $1";;
+[-./]*|*[-./])		OOPS "start/end character not usable in $1";;
+esac
+
+FIRST="${NAME##/*}"
+ORG="$FIRST"
+FIRST="${FIRST//-/--}"
+SECOND="${NAME%%*/}"
+SECOND="${SECOND//-/--}"
+
+if [ ".$FIRST" = ".$SECOND" ]
+then
+	FULL="$FIRST"
+	DEV="/dev/$ORG"
+else
+	FULL="$FIRST-$SECOND"
+	DEV="/dev/$1"
+fi
+}
+
+check "$1"
+TARGET="$FULL"
+SRC="$DEV"
+check "$2"
+DST="$DEV"
+[ ".$TARGET" = ".$FULL" ] && OOPS "the both args must differ!"
+
+mkdir "$TARGET" || OOPS "exists: $TARGET"
+
+ln -s "$SRC" "$TARGET/src"
+ln -s "$DST" "$TARGET/dst"
+
+[ -s "$TARGET/src" ] || WARN "source missing: $SRC"
+[ -b "$TARGET/src" ] || WARN "source not a block device: $SRC"
+
+[ -s "$TARGET/dst" ] || WARN "dest missing: $DST"
+[ -b "$TARGET/dst" ] || WARN "dest not a block device: $DST"
+
+$ret
+
